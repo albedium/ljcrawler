@@ -1,0 +1,49 @@
+apply plugin: 'java'
+apply plugin: 'maven'
+apply plugin: 'idea'
+
+group = 'com.gmail.kompotik'
+version = '0.0.1'
+
+sourceCompatibility = 1.6
+targetCompatibility = 1.6
+
+ideaProject {
+  javaVersion = '1.6'
+}
+
+repositories {
+  mavenRepo urls: ["http://repo1.maven.org/maven2"]
+  mavenRepo urls: ["http://snapshots.repository.codehaus.org/"]
+}
+
+dependencies {
+  compile 'com.google.code.gson:gson:1.7.1'
+  compile 'com.google.guava:guava:r09'
+  compile 'com.google.inject:guice:3.0'
+  compile 'commons-io:commons-io:2.0.1'
+  compile 'commons-lang:commons-lang:2.6'
+  compile 'joda-time:joda-time:1.6.2'
+  compile 'org.ccil.cowan.tagsoup:tagsoup:1.2'
+  compile 'org.apache.httpcomponents:httpclient:4.1.1'
+  compile 'org.apache.httpcomponents:httpcore:4.1'
+  compile 'org.yaml:snakeyaml:1.8'
+  compile 'xalan:xalan:2.7.1'
+}
+
+manifest.attributes(
+  "Main-Class": "com.gmail.kompotik.ljcrawler.EntryPoint",
+)
+
+// creating fat jar
+jar.doFirst {
+  def classpath = configurations.compile.collect { it.directory ? it : zipTree(it) }
+  from (classpath) { }
+}
+
+ideaProject {
+  withXml { provider ->
+    provider.node.component.find { it.@name == 'VcsDirectoryMappings' }.mapping.@vcs = 'Git'
+  }
+}
+
