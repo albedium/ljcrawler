@@ -11,6 +11,7 @@
 */build
 /processed
 /web-cache
+/m2
 
 # IntelliJ specific files/directories
 out
