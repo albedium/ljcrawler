@@ -62,7 +62,7 @@ class LjUserZyalt implements LJUser {
   }
 
   @Override
-  public boolean supportsTags() {
+  public Boolean supportsTags() {
     return true
   }
 
@@ -79,5 +79,10 @@ class LjUserZyalt implements LJUser {
   @Override
   public String getXpathEntryContent() {
     return "//html:div[@class = 'entry-content']"
+  }
+
+  @Override
+  String postProcessEntryText(String entryText, String entryTitle) {
+    return entryText
   }
 }

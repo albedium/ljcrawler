@@ -42,6 +42,15 @@ class LjUserDrugoi implements LJUser {
   }
 
   @Override
+  String postProcessEntryText(String entryText, String entryTitle) {
+    String text = '<font face="Arial,Helvetica" size="+1"><i><b>' + entryTitle + '</b></i></font><br />'
+    if (entryText.startsWith(text)) {
+      return entryText.substring(text.length());
+    }
+    return entryText
+  }
+
+  @Override
   public String getXpathCommentText() {
     return "//html:div[@class = 'talk-comment-box']"
   }

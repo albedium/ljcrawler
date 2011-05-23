@@ -135,8 +135,10 @@ public class LjCrawler {
     }
     final XObject imagesXObject = XPathAPI.eval(doc, user.invokeMethod("getXpathEntryContent", null) + "//html:img");
     cleanSecondPhase = persistImages(imagesXObject, cleanSecondPhase);
-    System.out.println("-- after image saving = " + cleanSecondPhase);
-    ljPost.setContent(cleanSecondPhase);
+    ljPost.setContent(
+        (String)user.invokeMethod("postProcessEntryText", new Object[]{cleanSecondPhase, ljPost.getName()})
+    );
+    System.out.println("-- final content = " + ljPost.getContent());
 //    ljPost.setStatus(Story.Status.PUBLISHED);
     final XObject date = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathStoryDate", null));
     System.out.println("date = " + date.nodelist().item(0).getTextContent());
@@ -317,7 +319,9 @@ public class LjCrawler {
           DateTimeFormatter fmt = DateTimeFormat.forPattern("YYYY-MM-dd hh:mm aa");
           ljComment.setDate(fmt.withZone(DateTimeZone.UTC).parseDateTime(dateString));
           ljComment.setText(
-              (String)user.invokeMethod("postProcessCommentText", new Object[] {stripOuterMostTag(xobjectToString(comment))})
+              (String)user.invokeMethod("postProcessCommentText", new Object[] {
+                  safeHtmlClean(stripOuterMostTag(xobjectToString(comment)))
+              })
           );
         }
 

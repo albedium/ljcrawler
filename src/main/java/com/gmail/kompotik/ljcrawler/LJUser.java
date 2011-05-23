@@ -31,6 +31,8 @@ public interface LJUser {
 
   String postProcessCommentText(String commentText);
 
+  String postProcessEntryText(String entryText, String entryTitle);
+
   String getXpathPageCounter();
 
   String getXpathPreviousPageLink();

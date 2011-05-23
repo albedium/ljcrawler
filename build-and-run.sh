@@ -1,1 +1,1 @@
-gradle build && java -Xms512m -Xmx1024m -jar build/libs/ljcrawler-0.0.1.jar
+gradle build && java -Xms512m -Xmx1024m -jar build/libs/ljcrawler-0.0.1.jar zyalt drugoi
