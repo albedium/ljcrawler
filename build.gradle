@@ -1,4 +1,5 @@
 apply plugin: 'java'
+apply plugin: 'groovy'
 apply plugin: 'maven'
 apply plugin: 'idea'
 
@@ -28,6 +29,7 @@ dependencies {
   compile 'org.apache.httpcomponents:httpclient:4.1.1'
   compile 'org.apache.httpcomponents:httpcore:4.1'
   compile 'org.yaml:snakeyaml:1.8'
+  compile 'org.codehaus.groovy:groovy:1.8.0'
   compile 'xalan:xalan:2.7.1'
 }
 

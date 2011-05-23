@@ -43,22 +43,36 @@ import com.google.gson.reflect.TypeToken;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
+import groovy.lang.GroovyClassLoader;
+import groovy.lang.GroovyObject;
 
 @Singleton
 public class LjCrawler {
   private final UrlFetcher urlFetcher;
-  private LjUser ljUser;
   private String processedDir;
+  private String userConfigDir;
+  private GroovyObject user;
 
   @Inject
-  public LjCrawler(@Named("ljcrawler.dir.processed") String processedDir, UrlFetcher urlFetcher) {
+  public LjCrawler(
+      @Named("ljcrawler.dir.processed") String processedDir,
+      @Named("ljcrawler.dir.userConfig") String userConfigDir,
+      UrlFetcher urlFetcher) {
     this.processedDir = processedDir;
+    this.userConfigDir = userConfigDir;
     this.urlFetcher = urlFetcher;
   }
 
-  public void crawl(LjUser ljUser) throws Exception {
-    this.ljUser = ljUser;
-    doCrawl("http://" + this.ljUser.name() + ".livejournal.com/");
+  public void crawl(String ljUser) throws Exception {
+    ClassLoader parent = getClass().getClassLoader();
+    GroovyClassLoader loader = new GroovyClassLoader(parent);
+    Class groovyClass = loader.parseClass(new File(userConfigDir + File.separator + "LjUser"
+        + ljUser.substring(0, 1).toUpperCase()
+        + ljUser.substring(1).toLowerCase() + ".groovy")
+    );
+    user = (GroovyObject) groovyClass.newInstance();
+
+    doCrawl("http://" + user.invokeMethod("getName", null) + ".livejournal.com/");
   }
 
   private void doCrawl(String urlToSearchArticlesAt) throws Exception {
@@ -70,7 +84,7 @@ public class LjCrawler {
     Node doc = getDocument(new String(bytes));
 
 
-    XObject titles = XPathAPI.eval(doc, ljUser.getXpathLinkToStory());
+    XObject titles = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathLinkToStory", null));
     LjPost ljPostParent = null;
     for (int i = 0; i < titles.nodelist().getLength(); i++) {
       final Node item = titles.nodelist().item(i);
@@ -83,7 +97,7 @@ public class LjCrawler {
     }
 
 
-    XObject prevLink = XPathAPI.eval(doc, ljUser.getXpathPreviousPageLink());
+    XObject prevLink = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathPreviousPageLink", null));
     if (prevLink.nodelist() != null) {
       final Node prevUrl = prevLink.nodelist().item(0).getAttributes().getNamedItem("href");
       System.out.println("============ end of page ===========");
@@ -100,18 +114,18 @@ public class LjCrawler {
     }
     Node doc = getDocument(new String(bytes));
     LjPost ljPost = new LjPost();
-    final XObject h1 = XPathAPI.eval(doc, ljUser.getXpathH1());
+    final XObject h1 = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathH1", null));
     ljPost.setName(h1.nodelist().item(0).getTextContent());
     System.out.println("-- h1 = " + h1.nodelist().item(0).getTextContent());
     String postId = storyUrl.substring(storyUrl.lastIndexOf('/') + 1, storyUrl.lastIndexOf('.'));
     System.out.println("-- id = " + postId);
     ljPost.setPostId(postId);
-    final XObject entryContent = XPathAPI.eval(doc, ljUser.getXpathEntryContent());
+    final XObject entryContent = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathEntryContent", null));
     final String dirtyContent = stripOuterMostTag(xobjectToString(entryContent));
     String cleanFirstPhase = unsafeHtmlClean(dirtyContent);
     String cleanSecondPhase = safeHtmlClean(stripOuterMostTag(nodeToString(getDocument(cleanFirstPhase).getFirstChild().getFirstChild())));
-    if (ljUser.supportsTags()) {
-      final XObject tagsXObject = XPathAPI.eval(doc, ljUser.getXpathTags());
+    if ((Boolean)user.invokeMethod("supportsTags", null)) {
+      final XObject tagsXObject = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathTags", null));
       List<String> tags = getTags(tagsXObject);
       System.out.println("-- tags are ");
       System.out.println();
@@ -119,14 +133,14 @@ public class LjCrawler {
         System.out.println("-  " + tag);
       }
     }
-    final XObject imagesXObject = XPathAPI.eval(doc, ljUser.getXpathEntryContent() + "//html:img");
+    final XObject imagesXObject = XPathAPI.eval(doc, user.invokeMethod("getXpathEntryContent", null) + "//html:img");
     cleanSecondPhase = persistImages(imagesXObject, cleanSecondPhase);
     System.out.println("-- after image saving = " + cleanSecondPhase);
     ljPost.setContent(cleanSecondPhase);
 //    ljPost.setStatus(Story.Status.PUBLISHED);
-    final XObject date = XPathAPI.eval(doc, ljUser.getXpathStoryDate());
+    final XObject date = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathStoryDate", null));
     System.out.println("date = " + date.nodelist().item(0).getTextContent());
-    DateTimeFormatter fmt = DateTimeFormat.forPattern(ljUser.getDateFormatForStory());
+    DateTimeFormatter fmt = DateTimeFormat.forPattern((String)user.invokeMethod("getDateFormatForStory", null));
     final DateTime dateTime = fmt.parseDateTime(date.nodelist().item(0).getTextContent());
     /**
      * тут некоторая фигня с датами
@@ -142,7 +156,7 @@ public class LjCrawler {
     ljPost.setParentId(parent != null ? parent.getId() : null);
 
     processComments(doc, postId, ljPost);
-    final XObject totalPages = XPathAPI.eval(doc, ljUser.getXpathPageCounter());
+    final XObject totalPages = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathPageCounter", null));
     if (StringUtils.isNotBlank(xobjectToString(totalPages))) {
       final String totalPagesString = stripOuterMostTag(xobjectToString(totalPages));
       final int totalPagesInt = Integer.parseInt(totalPagesString.substring(totalPagesString.lastIndexOf(" ") + 1));
@@ -172,13 +186,13 @@ public class LjCrawler {
   private void processComments(Node doc, String postId, LjPost ljPost) throws Exception {
     // загрузим все комменты первого уровня, а потом будет делать по одному запросу на каждую ветку
     // и парсить уже всю ветку
-    final XObject commentsTopLevel = XPathAPI.eval(doc, ljUser.getXpathCommentsWrap());
+    final XObject commentsTopLevel = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathCommentsWrap", null));
     System.out.println("-- top level comment count = " + commentsTopLevel.nodelist().getLength());
     Map<String, Long> dbIdByThread = Maps.newHashMap();
     for (int i = 0; i < commentsTopLevel.nodelist().getLength(); i++) {
       final Node commentNode = commentsTopLevel.nodelist().item(i);
       final String threadId = commentNode.getAttributes().getNamedItem("id").getTextContent()
-          .substring(LjUser.DIV_COMMENT_IDENTIFICATOR.length()
+          .substring(LJUser.DIV_COMMENT_IDENTIFICATOR.length()
           );
       List<LjComment> allCommentsExpanded = new ArrayList<LjComment>();
       loadCommentByThread(postId, threadId, allCommentsExpanded, 0);
@@ -214,7 +228,7 @@ public class LjCrawler {
     final DumperOptions dumperOptions = new DumperOptions();
     dumperOptions.setAllowReadOnlyProperties(false);
     Yaml yaml = new Yaml(new JodaTimeRepresenter(), dumperOptions);
-    final String out = processedDir + File.separatorChar + ljUser.name();
+    final String out = processedDir + File.separatorChar + user.invokeMethod("getName", null);
     new File(out).mkdirs();
     yaml.dump(se, new FileWriter(out + File.separatorChar + getPostFileName(se)));
 //    se = storyDao.save(se);
@@ -246,8 +260,9 @@ public class LjCrawler {
   private void loadCommentByThread(String postId, String threadId, List<LjComment> allComments, int depth) throws IOException {
 //    System.out.println("loading comments postId =" + postId + "; threadId =" + threadId + "; allComments count=" + allComments.size() + "; depth =" + depth);
     final String urlToGetThread =
-        "http://" + ljUser + ".livejournal.com/" + ljUser
-            + "/__rpc_get_thread?journal=" + ljUser + "&itemid="
+        "http://" + user.invokeMethod("getName", null) + ".livejournal.com/"
+            + user.invokeMethod("getName", null)
+            + "/__rpc_get_thread?journal=" + user.invokeMethod("getName", null) + "&itemid="
             + postId + "&thread=" + threadId + "&depth=" + depth;
     final byte[] bytes = urlFetcher.urlToByteArray(urlToGetThread);
     if (bytes == null) {
@@ -289,9 +304,9 @@ public class LjCrawler {
 //      throw new Exception("Invalid document " + ljComment.html);
       return;
     }
-    final XObject comment = XPathAPI.eval(commentNode, ljUser.getXpathCommentText());
-    final XObject username = XPathAPI.eval(commentNode, ljUser.getXpathCommentUsername());
-    final XObject date = XPathAPI.eval(commentNode, ljUser.getXpathCommentDate());
+    final XObject comment = XPathAPI.eval(commentNode, (String)user.invokeMethod("getXpathCommentText", null));
+    final XObject username = XPathAPI.eval(commentNode, (String)user.invokeMethod("getXpathCommentUsername", null));
+    final XObject date = XPathAPI.eval(commentNode, (String)user.invokeMethod("getXpathCommentDate", null));
 
     String dateString = null;
     if (!ljComment.hasBeenDeleted()) {
@@ -301,7 +316,9 @@ public class LjCrawler {
           dateString = dateString.substring(0, dateString.lastIndexOf(' '));
           DateTimeFormatter fmt = DateTimeFormat.forPattern("YYYY-MM-dd hh:mm aa");
           ljComment.setDate(fmt.withZone(DateTimeZone.UTC).parseDateTime(dateString));
-          ljComment.setText(ljUser.postProcessCommentText(stripOuterMostTag(xobjectToString(comment))));
+          ljComment.setText(
+              (String)user.invokeMethod("postProcessCommentText", new Object[] {stripOuterMostTag(xobjectToString(comment))})
+          );
         }
 
 

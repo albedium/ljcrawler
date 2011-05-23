@@ -7,8 +7,7 @@ public class EntryPoint {
   public static void main(String[] args) throws Exception {
     final Injector injector = Guice.createInjector(new LjCrawlerModule());
     LjCrawler crawler = injector.getInstance(LjCrawler.class);
-//    crawler.crawl(LjUser.zyalt);
-    crawler.crawl(LjUser.drugoi);
+    crawler.crawl("drugoi");
     System.exit(0);
   }
 }
