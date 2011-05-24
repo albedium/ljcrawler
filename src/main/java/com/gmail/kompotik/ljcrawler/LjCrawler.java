@@ -1,5 +1,6 @@
 package com.gmail.kompotik.ljcrawler;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.xalan.xsltc.trax.SAX2DOM;
 import org.apache.xpath.XPathAPI;
@@ -15,12 +16,12 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXNotRecognizedException;
 import org.xml.sax.SAXNotSupportedException;
-import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
@@ -35,7 +36,6 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import com.gmail.kompotik.ljcrawler.snakeyaml.JodaTimeRepresenter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -52,6 +52,8 @@ public class LjCrawler {
   private String processedDir;
   private String userConfigDir;
   private GroovyObject user;
+  public static String FILE_NAME_SUFFIX_POST = "-post.yaml";
+  public static String FILE_NAME_SUFFIX_COMMENTS = "-comments.yaml";
 
   @Inject
   public LjCrawler(
@@ -101,9 +103,8 @@ public class LjCrawler {
     if (prevLink.nodelist() != null) {
       final Node prevUrl = prevLink.nodelist().item(0).getAttributes().getNamedItem("href");
       System.out.println("============ end of page ===========");
-      System.out.println("========= starting new topic =======");
-      System.out.println("previous articles bunch will be loaded from " + prevUrl.getTextContent());
-//      doCrawl(prevUrl.getTextContent());
+      System.out.println("========= starting new page ========");
+      doCrawl(prevUrl.getTextContent());
     }
   }
 
@@ -131,6 +132,7 @@ public class LjCrawler {
       System.out.println();
       for (String tag : tags) {
         System.out.println("-  " + tag);
+        ljPost.getTags().add(tag);
       }
     }
     final XObject imagesXObject = XPathAPI.eval(doc, user.invokeMethod("getXpathEntryContent", null) + "//html:img");
@@ -150,14 +152,15 @@ public class LjCrawler {
      * parsed date = 2011-05-13T16:47:00.000+04:00
      * formatted date = 2011-05-13 16:47:00
      */
-    ljPost.setDate(dateTime);
+    ljPost.setDate(dateTime.toDate());
     System.out.println("parsed date = " + dateTime);
     System.out.println("formatted date = " + dateTime.toString("YYYY-MM-dd HH:mm:ss"));
     System.out.println();
     System.out.println();
     ljPost.setParentId(parent != null ? parent.getId() : null);
 
-    processComments(doc, postId, ljPost);
+    List<LjComment> allComments = new ArrayList<LjComment>();
+    processComments(doc, postId, allComments);
     final XObject totalPages = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathPageCounter", null));
     if (StringUtils.isNotBlank(xobjectToString(totalPages))) {
       final String totalPagesString = stripOuterMostTag(xobjectToString(totalPages));
@@ -170,46 +173,41 @@ public class LjCrawler {
             continue;
           }
           final Node commentsDoc = getDocument(new String(bytesComments));
-          processComments(
-              commentsDoc,
-              postId,
-              ljPost);
+          processComments(commentsDoc, postId, allComments);
         }
       }
     } else {
       System.out.println("-- no additional comment pages found");
     }
 
-    ljPost = dumpPostToDisk(ljPost);
+    Map<String, Long> dbIdByThread = Maps.newHashMap();
+    for (LjComment ljComment : allComments) {
+      preProcessForSavingAndPrintLjComment(ljComment, allComments);
+      saveComment(ljComment, dbIdByThread, ljPost);
+    }
+    ljPost = dumpPostToDisk(ljPost, allComments);
 
     return ljPost;
   }
 
-  private void processComments(Node doc, String postId, LjPost ljPost) throws Exception {
+  private void processComments(Node doc, String postId, List<LjComment> allComments) throws Exception {
     // загрузим все комменты первого уровня, а потом будет делать по одному запросу на каждую ветку
     // и парсить уже всю ветку
     final XObject commentsTopLevel = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathCommentsWrap", null));
     System.out.println("-- top level comment count = " + commentsTopLevel.nodelist().getLength());
-    Map<String, Long> dbIdByThread = Maps.newHashMap();
     for (int i = 0; i < commentsTopLevel.nodelist().getLength(); i++) {
       final Node commentNode = commentsTopLevel.nodelist().item(i);
       final String threadId = commentNode.getAttributes().getNamedItem("id").getTextContent()
           .substring(LJUser.DIV_COMMENT_IDENTIFICATOR.length()
           );
-      List<LjComment> allCommentsExpanded = new ArrayList<LjComment>();
-      loadCommentByThread(postId, threadId, allCommentsExpanded, 0);
-      ljPost.getLjComments().addAll(allCommentsExpanded);
-      for (LjComment ljComment : allCommentsExpanded) {
-        preProcessForSavingAndPrintLjComment(ljComment, allCommentsExpanded);
-        saveComment(ljComment, dbIdByThread, ljPost);
-      }
-    }
+      loadCommentByThread(postId, threadId, allComments, 0);
+   }
   }
 
   private void saveComment(LjComment ljComment, Map<String, Long> dbIdByThread, LjPost ljPost) {
     PostCommentEntity comment = new PostCommentEntity();
     comment.setContent(ljComment.getText());
-    comment.setCreated(ljComment.getDate());
+//    comment.setCreated(ljComment.getDate());
     comment.setParentId(ljComment.getParent() != null ? dbIdByThread.get(ljComment.getParent()) : null);
     comment.setDeleted(false);
     comment.setStoryId(ljPost.getId());
@@ -226,13 +224,23 @@ public class LjCrawler {
     return postComment;
   }
 
-  LjPost dumpPostToDisk(LjPost se) throws IOException {
-    final DumperOptions dumperOptions = new DumperOptions();
-    dumperOptions.setAllowReadOnlyProperties(false);
-    Yaml yaml = new Yaml(new JodaTimeRepresenter(), dumperOptions);
+  LjPost dumpPostToDisk(LjPost se, List<LjComment> allComments) throws IOException {
+//    final DumperOptions dumperOptions = new DumperOptions();
+//    dumperOptions.setAllowReadOnlyProperties(false);
+//    dumperOptions.setAllowUnicode(false);
+    Yaml yaml = new Yaml();
+//    Yaml yaml = new Yaml();
     final String out = processedDir + File.separatorChar + user.invokeMethod("getName", null);
     new File(out).mkdirs();
-    yaml.dump(se, new FileWriter(out + File.separatorChar + getPostFileName(se)));
+//    final FileWriter outPost = new FileWriter(out + File.separatorChar + getPostFileName(se));
+    final OutputStreamWriter wr = new OutputStreamWriter(new FileOutputStream(out + File.separatorChar + getPostFileName(se)), "UTF-8");
+    yaml.dump(se, wr);
+    IOUtils.closeQuietly(wr);
+
+//    final FileWriter outComments = new FileWriter(out + File.separatorChar + getCommentsFileName(se));
+    final OutputStreamWriter wr1 = new OutputStreamWriter(new FileOutputStream(out + File.separatorChar + getCommentsFileName(se)), "UTF-8");
+    yaml.dumpAll(allComments.iterator(), wr1);
+    IOUtils.closeQuietly(wr1);
 //    se = storyDao.save(se);
 //    storyDao.putCache(se);
 //    storyDao.clearCache(se.getId());
@@ -241,7 +249,11 @@ public class LjCrawler {
   }
 
   private String getPostFileName(LjPost se) {
-    return se.getPostId();
+    return se.getPostId() + FILE_NAME_SUFFIX_POST;
+  }
+
+  private String getCommentsFileName(LjPost se) {
+    return se.getPostId() + FILE_NAME_SUFFIX_COMMENTS;
   }
 
   String getOrCreateUser(LjComment ljComment) {
@@ -277,6 +289,7 @@ public class LjCrawler {
     }.getType()
     );
     for (LjComment ljComment : ljComments) {
+      ljComment.setPostId(postId);
       if (ljComment.shouldExpand()) {
         loadCommentByThread(postId, ljComment.getThread(), allComments, ljComment.getDepth() - 1);
         // если не сделать этот break, то при нахождении первого коммента, которому нужно сделать
@@ -317,7 +330,7 @@ public class LjCrawler {
           dateString = stripOuterMostTag(xobjectToString(date));
           dateString = dateString.substring(0, dateString.lastIndexOf(' '));
           DateTimeFormatter fmt = DateTimeFormat.forPattern("YYYY-MM-dd hh:mm aa");
-          ljComment.setDate(fmt.withZone(DateTimeZone.UTC).parseDateTime(dateString));
+          ljComment.setDate(fmt.withZone(DateTimeZone.UTC).parseDateTime(dateString).toDate());
           ljComment.setText(
               (String)user.invokeMethod("postProcessCommentText", new Object[] {
                   safeHtmlClean(stripOuterMostTag(xobjectToString(comment)))
@@ -342,9 +355,9 @@ public class LjCrawler {
       i++;
     }
     if (!ljComment.hasBeenDeleted()) {
-      System.out.println(ljComment.getUser() + " - thread = "
-          + ljComment.getThread() + " - parent = " + ljComment.getParent() + " - date = " + dateString
-          + " - date parsed " + ljComment.getDate());
+//      System.out.println(ljComment.getUser() + " - thread = "
+//          + ljComment.getThread() + " - parent = " + ljComment.getParent() + " - date = " + dateString
+//          + " - date parsed " + ljComment.getDate());
     } else {
       System.out.println("posted by unknown deleted user - thread = "
           + ljComment.getThread() + " - parent = " + ljComment.getParent());
@@ -421,6 +434,8 @@ public class LjCrawler {
     dirtyContent = dirtyContent.replaceAll("<p\\/>", "");
     dirtyContent = dirtyContent.replaceAll("<wbr\\/>", "");
     dirtyContent = dirtyContent.replaceAll("<br clear=\"none\"\\s*/>", "<br />");
+    // see org.yaml.snakeyaml.reader.StreamReader.checkPrintable
+    dirtyContent = dirtyContent.replace("\uFFFD", "");
     return dirtyContent;
   }
 

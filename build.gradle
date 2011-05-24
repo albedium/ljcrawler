@@ -31,11 +31,12 @@ dependencies {
   compile 'org.yaml:snakeyaml:1.8'
   compile 'org.codehaus.groovy:groovy:1.8.0'
   compile 'xalan:xalan:2.7.1'
+  testCompile 'junit:junit:4.8.2'
 }
 
-manifest.attributes(
-  "Main-Class": "com.gmail.kompotik.ljcrawler.EntryPoint",
-)
+//manifest.attributes(
+//  "Main-Class": "com.gmail.kompotik.ljcrawler.EntryPoint",
+//)
 
 jar {
     manifest {
@@ -60,7 +61,7 @@ task zip(type: Zip) {
   }
   from('scripts') {
     fileMode = 0755
-    include '**/run*.sh'
+    include '**/*.sh'
     into '/'
   }
 }

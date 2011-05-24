@@ -2,6 +2,8 @@ package com.gmail.kompotik.ljcrawler;
 
 import org.joda.time.DateTime;
 
+import java.util.Date;
+
 public class LjComment {
   public String thread;
   // this field is to be set by gson only and should not be emitted by snakeyaml
@@ -10,9 +12,10 @@ public class LjComment {
   public int depth;
   public String state;
   public String parent;
-  public DateTime date;
+  public Date date;
   public String text;
   public String user;
+  public String postId;
 
   public boolean shouldExpand() {
     return getState().equals("collapsed");
@@ -55,7 +58,7 @@ public class LjComment {
         .append("; depth =").append(getDepth())
         .append("; state =").append(getState())
         .append("; parent =").append(getParent())
-        .append("; date =").append(getDate())
+//        .append("; date =").append(getDate())
         .append("; text =").append(getText())
         .append("; user =").append(getUser())
     .toString();
@@ -101,12 +104,12 @@ public class LjComment {
     this.parent = parent;
   }
 
-  public DateTime getDate() {
+  public Date getDate() {
     return date;
   }
 
-  public void setDate(DateTime date) {
-    this.date = date;
+  public void setDate(Date dateTime) {
+    this.date = dateTime;
   }
 
   public String getText() {
@@ -123,5 +126,13 @@ public class LjComment {
 
   public void setUser(String user) {
     this.user = user;
+  }
+
+  public String getPostId() {
+    return postId;
+  }
+
+  public void setPostId(String postId) {
+    this.postId = postId;
   }
 }
