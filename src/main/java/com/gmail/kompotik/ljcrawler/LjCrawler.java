@@ -136,7 +136,7 @@ public class LjCrawler {
       }
     }
     final XObject imagesXObject = XPathAPI.eval(doc, user.invokeMethod("getXpathEntryContent", null) + "//html:img");
-    cleanSecondPhase = persistImages(imagesXObject, cleanSecondPhase);
+//    cleanSecondPhase = persistImages(imagesXObject, cleanSecondPhase);
     ljPost.setContent(
         (String)user.invokeMethod("postProcessEntryText", new Object[]{cleanSecondPhase, ljPost.getName()})
     );
@@ -195,12 +195,13 @@ public class LjCrawler {
     // и парсить уже всю ветку
     final XObject commentsTopLevel = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathCommentsWrap", null));
     System.out.println("-- top level comment count = " + commentsTopLevel.nodelist().getLength());
+    Map<String, Integer> loadByThreadCount = Maps.newHashMap();
     for (int i = 0; i < commentsTopLevel.nodelist().getLength(); i++) {
       final Node commentNode = commentsTopLevel.nodelist().item(i);
       final String threadId = commentNode.getAttributes().getNamedItem("id").getTextContent()
           .substring(LJUser.DIV_COMMENT_IDENTIFICATOR.length()
           );
-      loadCommentByThread(postId, threadId, allComments, 0);
+      loadCommentByThread(postId, threadId, allComments, 0, loadByThreadCount);
    }
   }
 
@@ -271,7 +272,8 @@ public class LjCrawler {
     return null;
   }
 
-  private void loadCommentByThread(String postId, String threadId, List<LjComment> allComments, int depth) throws IOException {
+  private void loadCommentByThread(String postId, String threadId, List<LjComment> allComments,
+                                   int depth, Map<String, Integer> loadByThreadCount) throws IOException {
 //    System.out.println("loading comments postId =" + postId + "; threadId =" + threadId + "; allComments count=" + allComments.size() + "; depth =" + depth);
     final String urlToGetThread =
         "http://" + user.invokeMethod("getName", null) + ".livejournal.com/"
@@ -284,14 +286,32 @@ public class LjCrawler {
     }
     final String commentThread = new String(bytes);
     Gson gson = new Gson();
-    final List<LjComment> ljComments = (List<LjComment>) gson.fromJson(
-        commentThread, new TypeToken<Collection<LjComment>>() {
-    }.getType()
-    );
+    List<LjComment> ljComments;
+    try {
+      ljComments = (List<LjComment>) gson.fromJson(
+          commentThread, new TypeToken<Collection<LjComment>>() {
+      }.getType()
+      );
+    } catch (Exception e) {
+      System.err.println("Error parsing json saved from url " + urlToGetThread
+          + " and will be skipping further thread processing " + commentThread);
+      e.printStackTrace();
+      return;
+    }
     for (LjComment ljComment : ljComments) {
       ljComment.setPostId(postId);
+      if (!loadByThreadCount.containsKey(ljComment.getThread())) {
+        loadByThreadCount.put(ljComment.getThread(), 0);
+      }
+      loadByThreadCount.put(ljComment.getThread(), loadByThreadCount.get(ljComment.getThread()) + 1);
+      // condition introduced to workaround comments, that there are comments (on top level and?)
+      // posted by a suspended user - those comments have `expand` button near them,
+      // but have no children and this ends up in endless recursion; so we should fail test it
+      if (loadByThreadCount.get(ljComment.getThread()) > 5) {
+        continue;
+      }
       if (ljComment.shouldExpand()) {
-        loadCommentByThread(postId, ljComment.getThread(), allComments, ljComment.getDepth() - 1);
+        loadCommentByThread(postId, ljComment.getThread(), allComments, ljComment.getDepth() - 1, loadByThreadCount);
         // если не сделать этот break, то при нахождении первого коммента, которому нужно сделать
         // expand - все вложенные тоже будут поставленые в очередь и будет выполнена тонна
         // лишних запросов

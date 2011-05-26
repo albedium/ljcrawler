@@ -1,6 +1,7 @@
 package com.gmail.kompotik.ljcrawler;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -44,8 +45,7 @@ public class UrlFetcher {
       return null;
     }
     // make sure that URL has not already been cached on disk
-    Base64 encoder = new Base64(0, null, true);
-    final String urlBase64representation = encoder.encodeToString(url.getBytes());
+    final String urlBase64representation = Base64.encodeBase64URLSafeString(DigestUtils.sha512(url));
 
     final String fileName = TMP_FOLDER + File.separatorChar + urlBase64representation;
     File file = new File(fileName);

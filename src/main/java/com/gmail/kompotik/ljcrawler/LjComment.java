@@ -1,6 +1,6 @@
 package com.gmail.kompotik.ljcrawler;
 
-import org.joda.time.DateTime;
+import org.apache.commons.lang.StringUtils;
 
 import java.util.Date;
 
@@ -22,14 +22,24 @@ public class LjComment {
   }
 
   public boolean hasBeenDeleted() {
+    if (StringUtils.isBlank(getHtml())) {
+      // is that right; may be `true` should be returned
+      return false;
+    }
     return getHtml().contains("Deleted post") || getHtml().contains("Deleted comment");
   }
 
   public boolean isAnonymous() {
+    if (StringUtils.isBlank(getHtml())) {
+      return false;
+    }
     return getHtml().contains("<em>(Anonymous)</em>");
   }
 
-   public boolean isAccountSuspended() {
+  public boolean isAccountSuspended() {
+    if (StringUtils.isBlank(getHtml())) {
+      return false;
+    }
     return getHtml().contains("text-decoration:line-through");
   }
 
