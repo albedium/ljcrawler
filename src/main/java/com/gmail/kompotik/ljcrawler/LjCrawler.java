@@ -78,7 +78,7 @@ public class LjCrawler {
   }
 
   private void doCrawl(String urlToSearchArticlesAt) throws Exception {
-    final byte[] bytes = urlFetcher.urlToByteArray(urlToSearchArticlesAt);
+    final byte[] bytes = urlFetcher.urlToByteArray(urlToSearchArticlesAt, UrlFetchType.Index);
     if (bytes == null) {
       return;
     }
@@ -109,7 +109,7 @@ public class LjCrawler {
   }
 
   private LjPost fetchAndSaveArticle(String storyUrl, LjPost parent) throws Exception {
-    final byte[] bytes = urlFetcher.urlToByteArray(storyUrl);
+    final byte[] bytes = urlFetcher.urlToByteArray(storyUrl, UrlFetchType.Post);
     if (bytes == null) {
       return null;
     }
@@ -135,7 +135,7 @@ public class LjCrawler {
         ljPost.getTags().add(tag);
       }
     }
-    final XObject imagesXObject = XPathAPI.eval(doc, user.invokeMethod("getXpathEntryContent", null) + "//html:img");
+//    final XObject imagesXObject = XPathAPI.eval(doc, user.invokeMethod("getXpathEntryContent", null) + "//html:img");
 //    cleanSecondPhase = persistImages(imagesXObject, cleanSecondPhase);
     ljPost.setContent(
         (String)user.invokeMethod("postProcessEntryText", new Object[]{cleanSecondPhase, ljPost.getName()})
@@ -168,7 +168,10 @@ public class LjCrawler {
       System.out.println("-- total comment pages found = " + totalPagesInt);
       if (totalPagesInt > 1) {
         for (int i = 2; i <= totalPagesInt; i++) {
-          final byte[] bytesComments = urlFetcher.urlToByteArray(storyUrl + "?page=" + i);
+          final byte[] bytesComments = urlFetcher.urlToByteArray(
+              storyUrl + "?page=" + i,
+              UrlFetchType.Comment
+          );
           if (bytesComments == null) {
             continue;
           }
@@ -194,7 +197,7 @@ public class LjCrawler {
     // загрузим все комменты первого уровня, а потом будет делать по одному запросу на каждую ветку
     // и парсить уже всю ветку
     final XObject commentsTopLevel = XPathAPI.eval(doc, (String)user.invokeMethod("getXpathCommentsWrap", null));
-    System.out.println("-- top level comment count = " + commentsTopLevel.nodelist().getLength());
+    System.out.println("-- starting to process comments page; top level comment count = " + commentsTopLevel.nodelist().getLength());
     Map<String, Integer> loadByThreadCount = Maps.newHashMap();
     for (int i = 0; i < commentsTopLevel.nodelist().getLength(); i++) {
       final Node commentNode = commentsTopLevel.nodelist().item(i);
@@ -280,7 +283,7 @@ public class LjCrawler {
             + user.invokeMethod("getName", null)
             + "/__rpc_get_thread?journal=" + user.invokeMethod("getName", null) + "&itemid="
             + postId + "&thread=" + threadId + "&depth=" + depth;
-    final byte[] bytes = urlFetcher.urlToByteArray(urlToGetThread);
+    final byte[] bytes = urlFetcher.urlToByteArray(urlToGetThread, UrlFetchType.Comment);
     if (bytes == null) {
       return;
     }
@@ -400,7 +403,8 @@ public class LjCrawler {
       final Node img = imagesXObject.nodelist().item(i);
       final String imgSrc = img.getAttributes().getNamedItem("src").getTextContent();
 //      final HTTPResponse response = urlFetchService.fetch(new URL(imgSrc));
-      final byte[] imgBytes = urlFetcher.urlToByteArray(imgSrc);
+      // TODO: another UrlFetchType should be introduced if images are to be saved within this project
+      final byte[] imgBytes = urlFetcher.urlToByteArray(imgSrc, UrlFetchType.Comment);
       if (imgBytes == null) {
         continue;
       }
