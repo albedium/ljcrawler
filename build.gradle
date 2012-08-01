@@ -4,18 +4,25 @@ apply plugin: 'maven'
 apply plugin: 'idea'
 
 group = 'com.gmail.kompotik'
-version = '0.0.1'
+version = '0.0.2'
 
 sourceCompatibility = 1.6
 targetCompatibility = 1.6
 
-ideaProject {
-  javaVersion = '1.6'
+idea {
+  project {
+    jdkName = '1.6'
+    ipr {
+      withXml { provider ->
+        provider.node.component.find { it.@name == 'VcsDirectoryMappings' }.mapping.@vcs = 'Git'
+      }
+    }
+  }
 }
 
 repositories {
-  mavenRepo urls: ["http://repo1.maven.org/maven2"]
-  mavenRepo urls: ["http://snapshots.repository.codehaus.org/"]
+  mavenRepo url: "http://repo1.maven.org/maven2"
+  mavenRepo url: "http://snapshots.repository.codehaus.org/"
 }
 
 dependencies {
@@ -30,8 +37,7 @@ dependencies {
   compile 'org.apache.httpcomponents:httpcore:4.1'
   compile 'org.yaml:snakeyaml:1.8'
   compile 'org.codehaus.groovy:groovy:1.8.0'
-  // uncomment this if OpenJDK is used
-//  compile 'xalan:xalan:2.7.1'
+  compile 'xalan:xalan:2.7.1'
   testCompile 'junit:junit:4.8.2'
 }
 
@@ -73,13 +79,7 @@ uploadArchives {
   }
 }
 
-ideaProject {
-  withXml { provider ->
-    provider.node.component.find { it.@name == 'VcsDirectoryMappings' }.mapping.@vcs = 'Git'
-  }
-}
-
 task wrapper(type: Wrapper) {
-  gradleVersion = '1.0-milestone-3'
+  gradleVersion = '1.0'
 }
 
