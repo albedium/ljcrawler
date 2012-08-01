@@ -2,6 +2,9 @@ package com.gmail.kompotik.ljcrawler;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.xalan.xsltc.trax.SAX2DOM;
+import org.apache.xpath.XPathAPI;
+import org.apache.xpath.objects.XObject;
 import org.ccil.cowan.tagsoup.Parser;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -40,9 +43,6 @@ import com.google.gson.reflect.TypeToken;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
-import com.sun.org.apache.xalan.internal.xsltc.trax.SAX2DOM;
-import com.sun.org.apache.xpath.internal.XPathAPI;
-import com.sun.org.apache.xpath.internal.objects.XObject;
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyObject;
 
